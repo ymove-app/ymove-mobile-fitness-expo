@@ -5,17 +5,63 @@ import {
   FlatList,
   Image,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { ymove } from './lib/ymove';
-import type { Workout, WorkoutExercise } from 'ymove-exercise-api';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { apiKey, ymove } from './lib/ymove';
+import type { Exercise, Workout, WorkoutExercise } from 'ymove-exercise-api';
 
 type Screen = { kind: 'list'; workout: Workout } | { kind: 'player'; workout: Workout; index: number };
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <WorkoutApp />
+    </SafeAreaProvider>
+  );
+}
+
+// Signed video URLs expire after 48 hours, so always read them from fresh API
+// data. Prefer the primary clip and keep its orientation: most are portrait.
+function pickClip(exercise: Exercise) {
+  const clip = exercise.videos?.find((v) => v.isPrimary) ?? exercise.videos?.[0];
+  return {
+    uri: clip?.videoUrl ?? exercise.videoUrl,
+    poster: clip?.thumbnailUrl ?? exercise.thumbnailUrl,
+    orientation: clip?.orientation ?? 'portrait',
+  };
+}
+
+function ExerciseVideo({ exercise }: { exercise: Exercise }) {
+  const clip = pickClip(exercise);
+  const player = useVideoPlayer(clip.uri ? { uri: clip.uri } : null, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
+  const aspectRatio = clip.orientation === 'landscape' ? 16 / 9 : 9 / 16;
+
+  if (!clip.uri) {
+    return clip.poster ? (
+      <Image source={{ uri: clip.poster }} style={[styles.videoBox, { aspectRatio }]} />
+    ) : (
+      <View style={[styles.videoBox, styles.thumbFallback, { aspectRatio }]} />
+    );
+  }
+  return (
+    <VideoView
+      player={player}
+      style={[styles.videoBox, { aspectRatio }]}
+      contentFit="cover"
+      nativeControls={false}
+    />
+  );
+}
+
+function WorkoutApp() {
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +70,13 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!apiKey) {
+      setError(
+        'Add your API key first. Put it in .env as EXPO_PUBLIC_YMOVE_API_KEY, or in app.json under expo.extra.ymoveApiKey, then restart Expo. Get a free trial key at ymove.app/exercise-api/signup',
+      );
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const w = await ymove.workouts.generate({
@@ -141,6 +194,11 @@ function PlayerView({
 }) {
   const current: WorkoutExercise = workout.exercises[index];
   const next = workout.exercises[index + 1];
+
+  // Start loading the next clip while the user works through this one, so it
+  // plays without a loader when they tap Done.
+  const nextUri = next ? pickClip(next.exercise).uri : null;
+  useVideoPlayer(nextUri ? { uri: nextUri } : null);
   const progress = ((index + 1) / workout.exercises.length) * 100;
 
   return (
@@ -160,13 +218,8 @@ function PlayerView({
         <View style={[styles.progressFill, { width: `${progress}%` }]} />
       </View>
 
-      {/* Video hero — image fallback (player would use expo-av if wired) */}
-      <View style={styles.videoWrap}>
-        {current.exercise.thumbnailUrl ? (
-          <Image source={{ uri: current.exercise.thumbnailUrl }} style={styles.video} />
-        ) : (
-          <View style={[styles.video, styles.thumbFallback]} />
-        )}
+      <View style={styles.videoArea}>
+        <ExerciseVideo key={current.exercise.id} exercise={current.exercise} />
         {next && (
           <View style={styles.nextPreview}>
             <Text style={styles.nextLabel}>Next</Text>
@@ -218,7 +271,7 @@ function PlayerView({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0a0a' },
   center: { alignItems: 'center', justifyContent: 'center' },
-  error: { color: '#fecaca', fontSize: 14 },
+  error: { color: '#fecaca', fontSize: 14, lineHeight: 20, textAlign: 'center', paddingHorizontal: 32 },
 
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
   eyebrow: { color: '#a3a3a3', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' },
@@ -249,8 +302,8 @@ const styles = StyleSheet.create({
   progressBar: { height: 3, backgroundColor: '#1f1f1f', marginHorizontal: 20, borderRadius: 999, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#c4ff3d' },
 
-  videoWrap: { marginHorizontal: 20, marginTop: 16, aspectRatio: 16 / 9, borderRadius: 12, overflow: 'hidden', backgroundColor: '#1f1f1f' },
-  video: { width: '100%', height: '100%' },
+  videoArea: { flex: 1, marginTop: 16, marginHorizontal: 20, alignItems: 'center', justifyContent: 'center' },
+  videoBox: { height: '100%', maxWidth: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: '#1f1f1f' },
   nextPreview: {
     position: 'absolute', right: 8, bottom: 8,
     backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '60%',
@@ -258,17 +311,17 @@ const styles = StyleSheet.create({
   nextLabel: { color: '#a3a3a3', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' },
   nextTitle: { color: '#fff', fontSize: 12, marginTop: 2 },
 
-  playerCard: { paddingHorizontal: 20, paddingTop: 20 },
+  playerCard: { paddingHorizontal: 20, paddingTop: 16 },
   playerTitle: { color: '#fff', fontSize: 22, fontWeight: '600' },
   playerMeta: { color: '#a3a3a3', fontSize: 13, marginTop: 4 },
-  bigNumbers: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24 },
-  bigNumber: { color: '#fff', fontSize: 64, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  bigNumbers: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  bigNumber: { color: '#fff', fontSize: 48, fontWeight: '700', fontVariant: ['tabular-nums'] },
   bigSep: { color: '#a3a3a3', fontSize: 32, marginHorizontal: 16 },
   restLabel: { color: '#a3a3a3', fontSize: 13, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
 
   transport: {
-    position: 'absolute', left: 20, right: 20, bottom: 32,
     flexDirection: 'row', gap: 12,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16,
   },
   transportBtn: {
     flex: 1, height: 56, borderRadius: 999, backgroundColor: '#1f1f1f',

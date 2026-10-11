@@ -1,10 +1,10 @@
 import { YMoveClient } from 'ymove-exercise-api';
 import Constants from 'expo-constants';
 
-// Reads YMOVE_API_KEY from expo-constants (app.json `extra.ymoveApiKey`) or
-// falls back to the demo key (10 exercises/month). Set `extra.ymoveApiKey` in
-// app.json or override at runtime for higher limits.
+// Reads the API key from app.json (`expo.extra.ymoveApiKey`) or from the
+// EXPO_PUBLIC_YMOVE_API_KEY environment variable (see .env.example).
+// Get a free trial key at https://ymove.app/exercise-api/signup
 const extra = (Constants.expoConfig?.extra ?? {}) as { ymoveApiKey?: string };
-const apiKey = extra.ymoveApiKey?.trim() || process.env.EXPO_PUBLIC_YMOVE_API_KEY || 'demo';
+export const apiKey = (extra.ymoveApiKey?.trim() || process.env.EXPO_PUBLIC_YMOVE_API_KEY || '').trim();
 
 export const ymove = new YMoveClient(apiKey);
