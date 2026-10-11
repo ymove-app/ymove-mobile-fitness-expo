@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -35,7 +35,7 @@ function pickClip(exercise: Exercise) {
   };
 }
 
-function ExerciseVideo({ exercise }: { exercise: Exercise }) {
+function ExerciseVideo({ exercise, children }: { exercise: Exercise; children?: ReactNode }) {
   const clip = pickClip(exercise);
   const player = useVideoPlayer(clip.uri ? { uri: clip.uri } : null, (p) => {
     p.loop = true;
@@ -44,20 +44,15 @@ function ExerciseVideo({ exercise }: { exercise: Exercise }) {
   });
   const aspectRatio = clip.orientation === 'landscape' ? 16 / 9 : 9 / 16;
 
-  if (!clip.uri) {
-    return clip.poster ? (
-      <Image source={{ uri: clip.poster }} style={[styles.videoBox, { aspectRatio }]} />
-    ) : (
-      <View style={[styles.videoBox, styles.thumbFallback, { aspectRatio }]} />
-    );
-  }
   return (
-    <VideoView
-      player={player}
-      style={[styles.videoBox, { aspectRatio }]}
-      contentFit="cover"
-      nativeControls={false}
-    />
+    <View style={[styles.videoBox, { aspectRatio }]}>
+      {clip.uri ? (
+        <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+      ) : clip.poster ? (
+        <Image source={{ uri: clip.poster }} style={StyleSheet.absoluteFill} />
+      ) : null}
+      {children}
+    </View>
   );
 }
 
@@ -219,15 +214,16 @@ function PlayerView({
       </View>
 
       <View style={styles.videoArea}>
-        <ExerciseVideo key={current.exercise.id} exercise={current.exercise} />
-        {next && (
-          <View style={styles.nextPreview}>
-            <Text style={styles.nextLabel}>Next</Text>
-            <Text style={styles.nextTitle} numberOfLines={1}>
-              {next.exercise.title}
-            </Text>
-          </View>
-        )}
+        <ExerciseVideo key={current.exercise.id} exercise={current.exercise}>
+          {next && (
+            <View style={styles.nextPreview}>
+              <Text style={styles.nextLabel}>Next</Text>
+              <Text style={styles.nextTitle} numberOfLines={1}>
+                {next.exercise.title}
+              </Text>
+            </View>
+          )}
+        </ExerciseVideo>
       </View>
 
       <View style={styles.playerCard}>
@@ -306,7 +302,7 @@ const styles = StyleSheet.create({
   videoBox: { height: '100%', maxWidth: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: '#1f1f1f' },
   nextPreview: {
     position: 'absolute', right: 8, bottom: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '60%',
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '85%',
   },
   nextLabel: { color: '#a3a3a3', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' },
   nextTitle: { color: '#fff', fontSize: 12, marginTop: 2 },
